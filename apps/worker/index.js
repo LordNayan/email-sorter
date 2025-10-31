@@ -26,7 +26,7 @@ async function scheduleSyncs() {
 scheduleSyncs();
 
 // Schedule every 2 minutes
-setInterval(scheduleSyncs, 2 * 60 * 1000);
+setInterval(scheduleSyncs, 0.5 * 60 * 1000);
 
 // Graceful shutdown
 process.on('SIGINT', async () => {

@@ -93,3 +93,73 @@ Content: ${(email.text || email.html || email.snippet || '').substring(0, 2000)}
     return email.snippet?.substring(0, 100) || 'No summary available';
   }
 }
+
+/**
+ * Analyze email and extract unsubscribe information using AI
+ * @param {object} email - { subject, from, text, html }
+ * @returns {Promise<{ summary: string, unsubscribeUrl: string|null, unsubscribeMailto: string|null }>}
+ */
+export async function analyzeEmail(email) {
+  // Use HTML if available (contains links), otherwise text
+  const content = (email.html || email.text || email.snippet || '').substring(0, 8000);
+  
+  const emailContent = `
+Subject: ${email.subject || 'No subject'}
+From: ${email.from || 'Unknown'}
+Content: ${content}
+  `.trim();
+
+  const messages = [
+    {
+      role: 'system',
+      content: `You are an email analysis assistant. Analyze emails and extract:
+1. A 1-3 sentence summary of the main purpose and action items
+2. Any unsubscribe URL (http/https links)
+3. Any unsubscribe mailto address
+
+Look for unsubscribe information in:
+- Links with text like "unsubscribe", "opt out", "manage preferences", "stop receiving"
+- Footer links
+- mailto: links for unsubscribe
+
+Respond ONLY with valid JSON in this exact format:
+{
+  "summary": "Brief 1-3 sentence summary",
+  "unsubscribeUrl": "https://example.com/unsubscribe" or null,
+  "unsubscribeMailto": "unsubscribe@example.com" or null
+}`,
+    },
+    {
+      role: 'user',
+      content: `Analyze this email:\n\n${emailContent}`,
+    },
+  ];
+
+  try {
+    const response = await complete(messages, { temperature: 0.2, maxTokens: 300 });
+    const parsed = JSON.parse(response.trim());
+    
+    // Validate response structure
+    if (parsed.summary && typeof parsed.summary === 'string') {
+      return {
+        summary: parsed.summary,
+        unsubscribeUrl: parsed.unsubscribeUrl || null,
+        unsubscribeMailto: parsed.unsubscribeMailto || null,
+      };
+    }
+    
+    // Fallback
+    return {
+      summary: email.snippet?.substring(0, 100) || 'No summary available',
+      unsubscribeUrl: null,
+      unsubscribeMailto: null,
+    };
+  } catch (error) {
+    console.error('Email analysis error:', error.message);
+    return {
+      summary: email.snippet?.substring(0, 100) || 'No summary available',
+      unsubscribeUrl: null,
+      unsubscribeMailto: null,
+    };
+  }
+}

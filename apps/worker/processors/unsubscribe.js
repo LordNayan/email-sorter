@@ -66,53 +66,171 @@ async function processUnsubscribeJob(job) {
   // Try URL if mailto failed or not available
   else if (email.unsubscribeUrl) {
     method = 'link';
+    let browser = null;
     try {
       console.log(`Opening browser for ${email.unsubscribeUrl}`);
-      const browser = await chromium.launch({ headless: false }); // Show browser for testing
-      const context = await browser.newContext();
+      browser = await chromium.launch({ 
+        headless: true,
+        timeout: 60000 // 60 second timeout for browser launch
+      });
+      const context = await browser.newContext({
+        viewport: { width: 1280, height: 720 },
+        userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+      });
       const page = await context.newPage();
 
-      // Navigate to unsubscribe page
-      await page.goto(email.unsubscribeUrl, { waitUntil: 'networkidle', timeout: 30000 });
+      // Set longer navigation timeout
+      page.setDefaultTimeout(45000);
+      page.setDefaultNavigationTimeout(45000);
 
-      // Look for common unsubscribe buttons/links
-      const selectors = [
+      // Navigate to unsubscribe page
+      try {
+        await page.goto(email.unsubscribeUrl, { 
+          waitUntil: 'domcontentloaded', // Changed from 'networkidle' for faster loading
+          timeout: 30000 
+        });
+      } catch (navError) {
+        // If navigation times out but page partially loaded, continue
+        console.log(`Navigation warning: ${navError.message}, continuing anyway...`);
+      }
+
+      // Wait a bit for any dynamic content to load
+      await page.waitForTimeout(2000);
+
+      // Comprehensive list of unsubscribe selectors
+      const unsubscribeSelectors = [
+        // Buttons with text
         'button:has-text("unsubscribe")',
+        'button:has-text("Unsubscribe")',
+        'button:has-text("UNSUBSCRIBE")',
+        'button:has-text("opt out")',
+        'button:has-text("Opt Out")',
+        'button:has-text("remove me")',
+        'button:has-text("Remove Me")',
+        
+        // Links with text
         'a:has-text("unsubscribe")',
-        'button:has-text("opt-out")',
-        'a:has-text("opt-out")',
+        'a:has-text("Unsubscribe")',
+        'a:has-text("Click here to unsubscribe")',
+        'a:has-text("opt out")',
+        'a:has-text("remove from list")',
+        
+        // Common class/id patterns (case insensitive)
+        'button[class*="unsubscribe" i]',
+        'a[class*="unsubscribe" i]',
+        'button[id*="unsubscribe" i]',
+        'a[id*="unsubscribe" i]',
+        
+        // Form inputs
+        'input[type="submit"][value*="unsubscribe" i]',
+        'input[type="button"][value*="unsubscribe" i]',
+        
+        // Generic confirmation buttons
         'button:has-text("confirm")',
+        'button:has-text("Confirm")',
+        'button:has-text("yes")',
+        'button:has-text("Yes")',
         'button:has-text("submit")',
         'input[type="submit"]',
       ];
 
       let clicked = false;
-      for (const selector of selectors) {
+      let clickedElement = null;
+
+      // Try each selector
+      for (const selector of unsubscribeSelectors) {
         try {
-          const element = await page.locator(selector).first();
-          if (await element.isVisible({ timeout: 2000 })) {
-            await element.click();
-            clicked = true;
-            break;
+          const elements = await page.locator(selector).all();
+          
+          for (const element of elements) {
+            if (await element.isVisible({ timeout: 1000 })) {
+              const text = await element.textContent();
+              console.log(`Found element: "${selector}" with text: "${text}"`);
+              
+              await element.click();
+              clicked = true;
+              clickedElement = `${selector} (${text})`;
+              
+              await page.waitForTimeout(2000);
+              
+              // Check for confirmation button
+              const confirmSelectors = ['button:has-text("confirm")', 'button:has-text("yes")', 'input[type="submit"]'];
+              for (const confirmSelector of confirmSelectors) {
+                try {
+                  const confirmBtn = await page.locator(confirmSelector).first();
+                  if (await confirmBtn.isVisible({ timeout: 1000 })) {
+                    console.log(`Clicking confirmation: ${confirmSelector}`);
+                    await confirmBtn.click();
+                    await page.waitForTimeout(2000);
+                    break;
+                  }
+                } catch (e) {
+                  // No confirmation needed
+                }
+              }
+              break;
+            }
           }
+          if (clicked) break;
         } catch (e) {
-          // Continue to next selector
+          continue;
         }
       }
 
-      if (clicked) {
-        await page.waitForLoadState('networkidle', { timeout: 10000 });
-        status = 'success';
-        notes = 'Clicked unsubscribe link';
+      // Check for success messages if no button clicked
+      if (!clicked) {
+        try {
+          const successPatterns = [
+            'successfully unsubscribed',
+            'you have been unsubscribed',
+            'removed from list',
+            'unsubscribe successful',
+            'you will no longer receive',
+          ];
+          
+          const pageText = await page.textContent('body');
+          for (const pattern of successPatterns) {
+            if (pageText.toLowerCase().includes(pattern)) {
+              status = 'success';
+              notes = `Auto-unsubscribed. Found: "${pattern}"`;
+              clicked = true;
+              break;
+            }
+          }
+          
+          if (!clicked) {
+            notes = 'No unsubscribe button found';
+          }
+        } catch (e) {
+          notes = 'Could not check for success messages';
+        }
       } else {
-        notes = 'No unsubscribe button found';
+        status = 'success';
+        notes = `Clicked: ${clickedElement}`;
       }
 
-      await browser.close();
+      // Screenshot for debugging
+      try {
+        await page.screenshot({ path: `/tmp/unsub-${emailId}.png`, fullPage: true });
+        console.log(`Screenshot saved to /tmp/unsub-${emailId}.png`);
+      } catch (e) {
+        console.log('Could not save screenshot:', e.message);
+      }
+
       console.log(`Processed unsubscribe link for ${email.unsubscribeUrl}`);
     } catch (error) {
       notes = `Failed to process link: ${error.message}`;
       console.error('Link unsubscribe failed:', error);
+    } finally {
+      // Always close browser, even if there was an error
+      if (browser) {
+        try {
+          await browser.close();
+          console.log('Browser closed successfully');
+        } catch (closeError) {
+          console.error('Error closing browser:', closeError.message);
+        }
+      }
     }
   } else {
     notes = 'No unsubscribe method available';

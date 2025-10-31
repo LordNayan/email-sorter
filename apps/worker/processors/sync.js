@@ -1,7 +1,7 @@
 import { Worker } from 'bullmq';
 import { PrismaClient } from '@email-sorter/db';
 import { createOAuth2Client, listMessages, getMessage, parseMessage, extractUnsubscribeInfo, archiveMessage, listHistory } from '@email-sorter/gmail';
-import { classifyEmail, summarizeEmail } from '@email-sorter/ai';
+import { classifyEmail, analyzeEmail } from '@email-sorter/ai';
 import { decryptToken } from '@email-sorter/core';
 
 const prisma = new PrismaClient();
@@ -112,9 +112,6 @@ async function processSyncJob(job) {
       const message = await getMessage(oauth2Client, messageId);
       const parsed = await parseMessage(message);
 
-      // Extract unsubscribe info
-      const unsubInfo = extractUnsubscribeInfo(parsed);
-
       // Classify email
       let categoryId = null;
       if (account.user.categories.length > 0) {
@@ -123,6 +120,7 @@ async function processSyncJob(job) {
             subject: parsed.subject,
             from: parsed.from,
             text: parsed.text,
+            html: parsed.html,
             snippet: parsed.snippet,
           },
           account.user.categories
@@ -134,13 +132,21 @@ async function processSyncJob(job) {
         }
       }
 
-      // Summarize email
-      const aiSummary = await summarizeEmail({
+      // Analyze email with AI (get summary + unsubscribe info)
+      const analysis = await analyzeEmail({
         subject: parsed.subject,
         from: parsed.from,
         text: parsed.text,
+        html: parsed.html,
         snippet: parsed.snippet,
       });
+
+      // Fallback to regex extraction if AI didn't find unsubscribe info
+      if (!analysis.unsubscribeUrl && !analysis.unsubscribeMailto) {
+        const unsubInfo = extractUnsubscribeInfo(parsed);
+        analysis.unsubscribeUrl = analysis.unsubscribeUrl || unsubInfo.url;
+        analysis.unsubscribeMailto = analysis.unsubscribeMailto || unsubInfo.mailto;
+      }
 
       // Parse date
       let receivedAt = new Date();
@@ -168,11 +174,11 @@ async function processSyncJob(job) {
           snippet: parsed.snippet,
           html: parsed.html,
           text: parsed.text,
-          aiSummary,
+          aiSummary: analysis.summary,
           categoryId,
           archivedAt: new Date(),
-          unsubscribeUrl: unsubInfo.url,
-          unsubscribeMailto: unsubInfo.mailto,
+          unsubscribeUrl: analysis.unsubscribeUrl,
+          unsubscribeMailto: analysis.unsubscribeMailto,
         },
       });
 

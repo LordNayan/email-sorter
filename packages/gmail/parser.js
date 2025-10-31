@@ -123,16 +123,43 @@ export function extractUnsubscribeInfo(parsedMessage) {
 export function findUnsubscribeLinkInHtml(html) {
   if (!html) return null;
 
-  // Simple regex to find unsubscribe links
+  // More comprehensive patterns to find unsubscribe links
   const patterns = [
+    // Link with "unsubscribe" in the text
     /<a[^>]+href=["']([^"']+)["'][^>]*>.*?unsubscribe.*?<\/a>/gi,
+    
+    // Link with "unsubscribe" in the href
     /<a[^>]+href=["']([^"']+unsubscribe[^"']*)["']/gi,
+    
+    // "unsubscribe here" pattern - captures the "here" link
+    /unsubscribe\s+<a[^>]+href=["']([^"']+)["'][^>]*>.*?here.*?<\/a>/gi,
+    
+    // "Update preferences or unsubscribe" with link on "here"
+    /(?:update|manage).*?preferences.*?(?:or|and).*?unsubscribe\s+<a[^>]+href=["']([^"']+)["'][^>]*>/gi,
+    
+    // Link with "opt out", "opt-out", "remove"
+    /<a[^>]+href=["']([^"']+)["'][^>]*>.*?(?:opt[- ]?out|remove|stop receiving).*?<\/a>/gi,
+    
+    // Reverse: text mentions unsubscribe before link
+    /(?:unsubscribe|opt[- ]?out|remove).*?<a[^>]+href=["']([^"']+)["'][^>]*>/gi,
   ];
 
   for (const pattern of patterns) {
+    // Reset lastIndex for global regex
+    pattern.lastIndex = 0;
     const match = pattern.exec(html);
     if (match && match[1]) {
-      return match[1];
+      // Decode HTML entities in URL
+      let url = match[1]
+        .replace(/&amp;/g, '&')
+        .replace(/&lt;/g, '<')
+        .replace(/&gt;/g, '>')
+        .replace(/&quot;/g, '"');
+      
+      // Only return if it looks like a valid URL
+      if (url.startsWith('http') || url.startsWith('//')) {
+        return url.startsWith('//') ? 'https:' + url : url;
+      }
     }
   }
 
