@@ -1,0 +1,33 @@
+{
+  "id": "test-message-123",
+  "threadId": "test-thread-123",
+  "snippet": "This is a test newsletter about our latest products...",
+  "payload": {
+    "headers": [
+      {
+        "name": "From",
+        "value": "newsletter@example.com"
+      },
+      {
+        "name": "To",
+        "value": "user@example.com"
+      },
+      {
+        "name": "Subject",
+        "value": "Weekly Newsletter - New Products"
+      },
+      {
+        "name": "Date",
+        "value": "Wed, 1 Nov 2023 10:00:00 -0700"
+      },
+      {
+        "name": "List-Unsubscribe",
+        "value": "<https://example.com/unsubscribe?id=123>, <mailto:unsubscribe@example.com>"
+      }
+    ],
+    "body": {
+      "data": "VGhhbmsgeW91IGZvciBzdWJzY3JpYmluZyB0byBvdXIgbmV3c2xldHRlci4gSGVyZSBhcmUgdGhlIGxhdGVzdCBwcm9kdWN0cy4="
+    },
+    "mimeType": "text/plain"
+  }
+}

@@ -1,0 +1,22 @@
+{
+  "name": "email-sorter",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "concurrently \"pnpm --filter api dev\" \"pnpm --filter web dev\" \"pnpm --filter worker dev\"",
+    "db:migrate": "pnpm --filter db migrate",
+    "db:seed": "pnpm --filter db seed",
+    "test": "pnpm --filter api test && pnpm --filter gmail test && pnpm test:e2e",
+    "test:e2e": "playwright test",
+    "lint": "eslint ."
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.40.0",
+    "concurrently": "^8.2.2",
+    "eslint": "^8.55.0"
+  },
+  "dependencies": {
+    "dotenv": "^16.3.1"
+  }
+}

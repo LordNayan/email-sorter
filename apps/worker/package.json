@@ -1,0 +1,19 @@
+{
+  "name": "@email-sorter/worker",
+  "version": "1.0.0",
+  "type": "module",
+  "main": "index.js",
+  "scripts": {
+    "dev": "node --watch index.js",
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "@email-sorter/ai": "workspace:*",
+    "@email-sorter/core": "workspace:*",
+    "@email-sorter/db": "workspace:*",
+    "@email-sorter/gmail": "workspace:*",
+    "bullmq": "^4.15.0",
+    "dotenv": "^16.3.1",
+    "playwright": "^1.40.0"
+  }
+}

@@ -1,0 +1,9 @@
+export async function up(prisma: any) {
+  // This migration creates the initial schema
+  console.log('Running initial migration...');
+}
+
+export async function down(prisma: any) {
+  // Rollback
+  console.log('Rolling back initial migration...');
+}

@@ -1,0 +1,92 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  name      String?
+  createdAt DateTime @default(now())
+
+  accounts   ConnectedAccount[]
+  categories Category[]
+  emails     Email[]
+}
+
+model ConnectedAccount {
+  id              String    @id @default(cuid())
+  userId          String
+  email           String
+  googleUserId    String    @unique
+  accessTokenEnc  String
+  refreshTokenEnc String
+  expiryDate      DateTime?
+  historyId       String?
+  createdAt       DateTime  @default(now())
+
+  user   User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  emails Email[]
+
+  @@index([userId])
+}
+
+model Category {
+  id          String   @id @default(cuid())
+  userId      String
+  name        String
+  description String?
+  createdAt   DateTime @default(now())
+
+  user   User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  emails Email[]
+
+  @@unique([userId, name])
+  @@index([userId])
+}
+
+model Email {
+  id                String    @id @default(cuid())
+  userId            String
+  accountId         String
+  gmailId           String    @unique
+  threadId          String
+  subject           String
+  from              String
+  receivedAt        DateTime
+  snippet           String?
+  html              String?
+  text              String?
+  aiSummary         String?
+  categoryId        String?
+  archivedAt        DateTime?
+  unsubscribeUrl    String?
+  unsubscribeMailto String?
+  createdAt         DateTime  @default(now())
+
+  user                 User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  account              ConnectedAccount      @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  category             Category?             @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  unsubscribeAttempts  UnsubscribeAttempt[]
+
+  @@index([userId, categoryId])
+  @@index([accountId])
+  @@index([gmailId])
+}
+
+model UnsubscribeAttempt {
+  id        String   @id @default(cuid())
+  emailId   String
+  method    String   // "link" or "mailto"
+  status    String   // "success" or "failed"
+  notes     String?
+  createdAt DateTime @default(now())
+
+  email Email @relation(fields: [emailId], references: [id], onDelete: Cascade)
+
+  @@index([emailId])
+}

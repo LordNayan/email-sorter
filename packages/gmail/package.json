@@ -1,0 +1,16 @@
+{
+  "name": "@email-sorter/gmail",
+  "version": "1.0.0",
+  "type": "module",
+  "main": "index.js",
+  "scripts": {
+    "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js"
+  },
+  "dependencies": {
+    "googleapis": "^128.0.0",
+    "mailparser": "^3.6.5"
+  },
+  "devDependencies": {
+    "jest": "^29.7.0"
+  }
+}
