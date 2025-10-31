@@ -3,10 +3,19 @@ import { PrismaClient } from '@email-sorter/db';
 import { parseCursor, createCursor, isArray } from '@email-sorter/core';
 import { createOAuth2Client, trashMessage, createRawMessage, sendMessage } from '@email-sorter/gmail';
 import { decryptToken } from '@email-sorter/core';
+import { Queue } from 'bullmq';
 
 const router = express.Router();
 const prisma = new PrismaClient();
 const ENCRYPTION_KEY = process.env.ENCRYPTION_KEY;
+
+// Create unsubscribe queue
+const unsubscribeQueue = new Queue('unsubscribe', {
+  connection: {
+    host: process.env.REDIS_HOST || 'localhost',
+    port: parseInt(process.env.REDIS_PORT || '6379'),
+  },
+});
 
 // Auth middleware
 function requireAuth(req, res, next) {
@@ -179,13 +188,13 @@ router.post('/bulk/unsubscribe', requireAuth, async (req, res) => {
       },
     });
 
-    // Count emails with unsubscribe options
+    // Count emails with unsubscribe options and enqueue jobs
     let queued = 0;
     for (const email of emails) {
       if (email.unsubscribeUrl || email.unsubscribeMailto) {
+        // Enqueue to BullMQ
+        await unsubscribeQueue.add('unsubscribe-email', { emailId: email.id });
         queued++;
-        // In production, enqueue to BullMQ:
-        // await enqueueUnsubscribeJob(email.id);
       }
     }
 

@@ -67,7 +67,8 @@ async function processUnsubscribeJob(job) {
   else if (email.unsubscribeUrl) {
     method = 'link';
     try {
-      const browser = await chromium.launch({ headless: true });
+      console.log(`Opening browser for ${email.unsubscribeUrl}`);
+      const browser = await chromium.launch({ headless: false }); // Show browser for testing
       const context = await browser.newContext();
       const page = await context.newPage();
 

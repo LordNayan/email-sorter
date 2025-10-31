@@ -112,6 +112,11 @@ OPENAI_API_KEY=sk-...
 SESSION_SECRET=generate-a-random-secret-here
 ENCRYPTION_KEY=generate-32-byte-hex-key-here
 ```
+Copy the env to db folder as well:
+
+```bash
+cp .env ./packages/db/.env
+```
 
 #### Generate Encryption Key
 

@@ -33,6 +33,9 @@ importers:
       '@email-sorter/gmail':
         specifier: workspace:*
         version: link:../../packages/gmail
+      bullmq:
+        specifier: ^4.15.0
+        version: 4.15.0
       cookie-parser:
         specifier: ^1.4.6
         version: 1.4.6
