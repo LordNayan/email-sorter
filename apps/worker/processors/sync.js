@@ -4,7 +4,7 @@ import { createOAuth2Client, listMessages, getMessage, parseMessage, extractUnsu
 import { classifyEmail, analyzeEmail } from '@email-sorter/ai';
 import { decryptToken } from '@email-sorter/core';
 
-const prisma = new PrismaClient();
+export const prisma = new PrismaClient();
 const ENCRYPTION_KEY = process.env.ENCRYPTION_KEY;
 
 const redisConnection = {
@@ -15,7 +15,7 @@ const redisConnection = {
 /**
  * Process sync job
  */
-async function processSyncJob(job) {
+export async function processSyncJob(job) {
   const { accountId, fullSync = false } = job.data;
 
   console.log(`Processing sync for account ${accountId}`);

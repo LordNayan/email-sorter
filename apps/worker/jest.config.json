@@ -1,0 +1,21 @@
+{
+  "testEnvironment": "node",
+  "roots": ["<rootDir>/tests"],
+  "transform": {},
+  "moduleNameMapper": {
+    "^@email-sorter/(.*)$": "<rootDir>/../../packages/$1"
+  },
+  "collectCoverage": true,
+  "collectCoverageFrom": [
+    "processors/**/*.js",
+    "queues.js"
+  ],
+  "coverageThreshold": {
+    "global": {
+      "branches": 60,
+      "functions": 70,
+      "lines": 70,
+      "statements": 70
+    }
+  }
+}

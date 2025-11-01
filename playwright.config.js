@@ -20,7 +20,8 @@ export default defineConfig({
   ],
 
   webServer: {
-    command: 'pnpm --filter web dev',
+    // Start both API and Web so proxied requests /me succeed
+    command: 'pnpm dev:web+api',
     url: 'http://localhost:5173',
     reuseExistingServer: !process.env.CI,
   },

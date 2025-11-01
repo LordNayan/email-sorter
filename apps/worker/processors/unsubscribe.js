@@ -4,7 +4,7 @@ import { chromium } from 'playwright';
 import { createOAuth2Client, createRawMessage, sendMessage } from '@email-sorter/gmail';
 import { decryptToken } from '@email-sorter/core';
 
-const prisma = new PrismaClient();
+export const prisma = new PrismaClient();
 const ENCRYPTION_KEY = process.env.ENCRYPTION_KEY;
 
 const redisConnection = {
@@ -15,7 +15,7 @@ const redisConnection = {
 /**
  * Process unsubscribe job
  */
-async function processUnsubscribeJob(job) {
+export async function processUnsubscribeJob(job) {
   const { emailId } = job.data;
 
   console.log(`Processing unsubscribe for email ${emailId}`);

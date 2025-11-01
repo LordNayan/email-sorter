@@ -157,6 +157,28 @@ This starts:
 - **Web App**: http://localhost:5173
 - **Worker**: Background email processor
 
+#### Dynamic API URL (Frontend Proxy)
+
+The frontend dev server now reads `VITE_API_URL` (or falls back to `API_URL`) to configure its proxy targets. To point the web app at a non-default API host/port:
+
+```bash
+echo "VITE_API_URL=http://localhost:4000" >> apps/web/.env
+```
+
+Or for a remote API:
+
+```bash
+echo "VITE_API_URL=https://api.your-domain.com" >> apps/web/.env
+```
+
+Then restart the web dev server:
+
+```bash
+pnpm --filter web dev
+```
+
+At build time you can also reference `__API_URL__` if needed inside the client code (currently defined via Vite's `define`).
+
 ## Usage
 
 ### 1. Sign In
