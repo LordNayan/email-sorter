@@ -95,7 +95,15 @@ async function processUnsubscribeJob(job) {
       }
 
       // Wait a bit for any dynamic content to load
-      await page.waitForTimeout(2000);
+      try {
+        await page.waitForTimeout(2000);
+      } catch (timeoutError) {
+        // Page might have closed (redirect to success page, etc)
+        console.log(`Page closed during wait, might have auto-unsubscribed`);
+        status = 'success';
+        notes = 'Page closed/redirected (likely auto-unsubscribed)';
+        return; // Exit early, browser will be closed in finally block
+      }
 
       // Comprehensive list of unsubscribe selectors
       const unsubscribeSelectors = [
@@ -151,7 +159,15 @@ async function processUnsubscribeJob(job) {
               clicked = true;
               clickedElement = `${selector} (${text})`;
               
-              await page.waitForTimeout(2000);
+              // Wait after click, but handle if page closes
+              try {
+                await page.waitForTimeout(2000);
+              } catch (waitError) {
+                console.log(`Page closed after click, likely successful redirect`);
+                status = 'success';
+                notes = `Clicked: ${clickedElement}, page closed (likely success)`;
+                return; // Exit early
+              }
               
               // Check for confirmation button
               const confirmSelectors = ['button:has-text("confirm")', 'button:has-text("yes")', 'input[type="submit"]'];
@@ -161,7 +177,15 @@ async function processUnsubscribeJob(job) {
                   if (await confirmBtn.isVisible({ timeout: 1000 })) {
                     console.log(`Clicking confirmation: ${confirmSelector}`);
                     await confirmBtn.click();
-                    await page.waitForTimeout(2000);
+                    
+                    try {
+                      await page.waitForTimeout(2000);
+                    } catch (waitError) {
+                      console.log(`Page closed after confirmation click`);
+                      status = 'success';
+                      notes = `Clicked: ${clickedElement} + confirmation, page closed (likely success)`;
+                      return;
+                    }
                     break;
                   }
                 } catch (e) {
@@ -173,6 +197,13 @@ async function processUnsubscribeJob(job) {
           }
           if (clicked) break;
         } catch (e) {
+          // Check if it's a "page closed" error
+          if (e.message && e.message.includes('Target page, context or browser has been closed')) {
+            console.log(`Page closed while looking for elements (might be auto-unsubscribe)`);
+            status = 'success';
+            notes = 'Page closed during interaction (likely auto-unsubscribed)';
+            return;
+          }
           continue;
         }
       }

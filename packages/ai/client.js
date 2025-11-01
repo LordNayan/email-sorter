@@ -39,7 +39,7 @@ export async function complete(messages, options = {}) {
   const aiClient = getClient();
   
   const {
-    model = 'gpt-3.5-turbo',
+    model = 'gpt-4o-mini', // Fast, cheap, and much better than gpt-3.5-turbo
     temperature = 0.3,
     maxTokens = 500,
   } = options;

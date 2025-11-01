@@ -41,8 +41,16 @@ Classify this email into the most appropriate category. Return JSON only.`,
   try {
     const response = await complete(messages, { temperature: 0.2, maxTokens: 100 });
     
+    // Remove markdown code blocks if present
+    let cleanResponse = response.trim();
+    if (cleanResponse.startsWith('```json')) {
+      cleanResponse = cleanResponse.replace(/^```json\s*/, '').replace(/\s*```$/, '');
+    } else if (cleanResponse.startsWith('```')) {
+      cleanResponse = cleanResponse.replace(/^```\s*/, '').replace(/\s*```$/, '');
+    }
+    
     // Parse JSON response
-    const parsed = JSON.parse(response.trim());
+    const parsed = JSON.parse(cleanResponse.trim());
     
     // Validate response structure
     if (parsed.categoryName && typeof parsed.confidence === 'number') {
@@ -101,7 +109,17 @@ Content: ${(email.text || email.html || email.snippet || '').substring(0, 2000)}
  */
 export async function analyzeEmail(email) {
   // Use HTML if available (contains links), otherwise text
-  const content = (email.html || email.text || email.snippet || '').substring(0, 8000);
+  const fullContent = email.html || email.text || email.snippet || '';
+  
+  // For unsubscribe detection, prioritize the LAST 15000 chars (footer area) + first 3000 chars
+  let content = '';
+  if (fullContent.length > 18000) {
+    const beginning = fullContent.substring(0, 3000);
+    const ending = fullContent.substring(fullContent.length - 15000);
+    content = beginning + '\n...[middle content omitted]...\n' + ending;
+  } else {
+    content = fullContent;
+  }
   
   const emailContent = `
 Subject: ${email.subject || 'No subject'}
@@ -114,18 +132,22 @@ Content: ${content}
       role: 'system',
       content: `You are an email analysis assistant. Analyze emails and extract:
 1. A 1-3 sentence summary of the main purpose and action items
-2. Any unsubscribe URL (http/https links)
-3. Any unsubscribe mailto address
+2. ANY unsubscribe URL (http/https links) - look VERY CAREFULLY in the footer/bottom
+3. ANY unsubscribe mailto address
 
-Look for unsubscribe information in:
-- Links with text like "unsubscribe", "opt out", "manage preferences", "stop receiving"
-- Footer links
+CRITICAL: Unsubscribe links are almost ALWAYS at the very bottom/footer of emails. Look for:
+- ANY link containing "unsubscribe" in the URL or anchor text
+- Links with text like "unsubscribe", "opt out", "opt-out", "manage preferences", "stop receiving", "email preferences"
+- Footer links near text about "don't want to receive" or "update preferences"
 - mailto: links for unsubscribe
+- Even if text says "If you don't want to receive" followed by a link
+
+Extract the FULL URL including all parameters. Do NOT return null if you see ANY unsubscribe-related link.
 
 Respond ONLY with valid JSON in this exact format:
 {
   "summary": "Brief 1-3 sentence summary",
-  "unsubscribeUrl": "https://example.com/unsubscribe" or null,
+  "unsubscribeUrl": "https://example.com/unsubscribe?params=here" or null,
   "unsubscribeMailto": "unsubscribe@example.com" or null
 }`,
     },
@@ -137,7 +159,16 @@ Respond ONLY with valid JSON in this exact format:
 
   try {
     const response = await complete(messages, { temperature: 0.2, maxTokens: 300 });
-    const parsed = JSON.parse(response.trim());
+    
+    // Remove markdown code blocks if present
+    let cleanResponse = response.trim();
+    if (cleanResponse.startsWith('```json')) {
+      cleanResponse = cleanResponse.replace(/^```json\s*/, '').replace(/\s*```$/, '');
+    } else if (cleanResponse.startsWith('```')) {
+      cleanResponse = cleanResponse.replace(/^```\s*/, '').replace(/\s*```$/, '');
+    }
+    
+    const parsed = JSON.parse(cleanResponse.trim());
     
     // Validate response structure
     if (parsed.summary && typeof parsed.summary === 'string') {
