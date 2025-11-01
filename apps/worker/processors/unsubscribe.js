@@ -105,39 +105,254 @@ async function processUnsubscribeJob(job) {
         return; // Exit early, browser will be closed in finally block
       }
 
-      // Comprehensive list of unsubscribe selectors
+      // Check if page already shows unsubscribed status (one-click unsubscribe)
+      try {
+        const pageText = await page.textContent('body');
+        const alreadyUnsubscribedPatterns = [
+          'unsubscribed',
+          'you\'ve unsubscribed',
+          'you have been unsubscribed',
+          'you\'ve been unsubscribed',
+          'you are unsubscribed',
+          'successfully unsubscribed',
+          'unsubscribed successfully',
+          'unsubscribe successful',
+          'you will no longer receive',
+          'removed from list',
+          'removed from mailing list',
+          'you have opted out',
+          'you\'ve opted out',
+          'subscription removed',
+        ];
+        
+        const lowerPageText = pageText.toLowerCase();
+        for (const pattern of alreadyUnsubscribedPatterns) {
+          if (lowerPageText.includes(pattern)) {
+            console.log(`Page already shows unsubscribed: "${pattern}"`);
+            status = 'success';
+            notes = `One-click unsubscribe successful. Found: "${pattern}"`;
+            return; // Exit early - already unsubscribed
+          }
+        }
+      } catch (e) {
+        console.log('Could not check page text for unsubscribe confirmation');
+      }
+
+      // Check for CAPTCHA
+      const captchaPatterns = [
+        'div[class*="captcha" i]',
+        'div[id*="captcha" i]',
+        'iframe[src*="recaptcha"]',
+        'div[class*="recaptcha"]',
+        '.g-recaptcha',
+        '#recaptcha',
+      ];
+      
+      for (const pattern of captchaPatterns) {
+        try {
+          const captcha = await page.locator(pattern).first();
+          if (await captcha.isVisible({ timeout: 500 })) {
+            console.log('CAPTCHA detected - cannot auto-unsubscribe');
+            status = 'failed';
+            notes = 'CAPTCHA detected - manual intervention required';
+            return;
+          }
+        } catch (e) {
+          // No CAPTCHA with this pattern
+        }
+      }
+
+      // Check for login requirement
+      const loginPatterns = [
+        'input[type="password"]',
+        'button:has-text("log in")',
+        'button:has-text("sign in")',
+        'a:has-text("log in")',
+      ];
+      
+      for (const pattern of loginPatterns) {
+        try {
+          const loginElement = await page.locator(pattern).first();
+          if (await loginElement.isVisible({ timeout: 500 })) {
+            console.log('Login required - cannot auto-unsubscribe');
+            status = 'failed';
+            notes = 'Login/authentication required - manual intervention needed';
+            return;
+          }
+        } catch (e) {
+          // No login required
+        }
+      }
+
+      // Scroll to bottom to reveal hidden content
+      try {
+        await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+        await page.waitForTimeout(1000);
+      } catch (e) {
+        console.log('Could not scroll page');
+      }
+
+      // Step 1: Handle tabs/navigation to preferences section
+      try {
+        const preferenceTabs = [
+          'a:has-text("Email Preferences")',
+          'button:has-text("Email Preferences")',
+          'a:has-text("Preferences")',
+          'a:has-text("Subscription Settings")',
+          'button:has-text("Manage Preferences")',
+        ];
+        
+        for (const tabSelector of preferenceTabs) {
+          try {
+            const tab = await page.locator(tabSelector).first();
+            if (await tab.isVisible({ timeout: 500 })) {
+              console.log(`Clicking preferences tab: ${tabSelector}`);
+              await tab.click();
+              await page.waitForTimeout(1000);
+              break;
+            }
+          } catch (e) {
+            // Tab not found
+          }
+        }
+      } catch (e) {
+        console.log('No preference tabs found');
+      }
+
+      // Step 2: Fill any required forms (email address, reason dropdowns, etc)
+      try {
+        // Look for email input fields that might be required
+        const emailInputs = await page.locator('input[type="email"], input[name*="email" i], input[id*="email" i], input[placeholder*="email" i]').all();
+        for (const input of emailInputs) {
+          if (await input.isVisible({ timeout: 500 })) {
+            const inputValue = await input.inputValue();
+            if (!inputValue || inputValue.trim() === '') {
+              console.log('Filling email field with user email');
+              await input.fill(email.from || 'user@example.com');
+            }
+          }
+        }
+
+        // Handle "reason for unsubscribing" dropdowns/selects
+        const reasonSelects = await page.locator('select[name*="reason" i], select[id*="reason" i], select[name*="why" i]').all();
+        for (const select of reasonSelects) {
+          if (await select.isVisible({ timeout: 500 })) {
+            const options = await select.locator('option').all();
+            if (options.length > 1) {
+              console.log('Selecting reason dropdown (first non-empty option)');
+              await select.selectOption({ index: 1 }); // Select first real option (skip placeholder)
+            }
+          }
+        }
+
+        // Handle radio buttons (choose "unsubscribe from all" option)
+        const radioGroups = await page.locator('input[type="radio"]').all();
+        const radioGroupNames = new Set();
+        
+        for (const radio of radioGroups) {
+          try {
+            const name = await radio.getAttribute('name');
+            const label = await page.locator(`label[for="${await radio.getAttribute('id')}"]`).textContent().catch(() => '');
+            const value = await radio.getAttribute('value');
+            
+            if (name && !radioGroupNames.has(name)) {
+              // Check if this is an "unsubscribe all" or similar option
+              const unsubscribePatterns = ['unsubscribe all', 'unsubscribe from all', 'stop all', 'no email', 'opt out'];
+              const shouldSelect = unsubscribePatterns.some(pattern => 
+                label.toLowerCase().includes(pattern) || 
+                (value && value.toLowerCase().includes(pattern))
+              );
+              
+              if (shouldSelect && await radio.isVisible({ timeout: 500 })) {
+                console.log(`Selecting radio: ${label || value}`);
+                await radio.check();
+                radioGroupNames.add(name);
+              }
+            }
+          } catch (e) {
+            // Skip this radio
+          }
+        }
+
+        // Handle checkboxes that need to be UNCHECKED (subscription preferences)
+        const subscriptionCheckboxes = await page.locator('input[type="checkbox"][name*="subscribe" i], input[type="checkbox"][name*="newsletter" i], input[type="checkbox"][name*="notification" i]').all();
+        for (const checkbox of subscriptionCheckboxes) {
+          if (await checkbox.isVisible({ timeout: 500 })) {
+            const isChecked = await checkbox.isChecked();
+            if (isChecked) {
+              console.log('Unchecking subscription checkbox');
+              await checkbox.uncheck();
+            }
+          }
+        }
+
+        // Handle checkboxes that need to be CHECKED (confirmation)
+        const confirmCheckboxes = await page.locator('input[type="checkbox"][name*="confirm" i], input[type="checkbox"][id*="confirm" i]').all();
+        for (const checkbox of confirmCheckboxes) {
+          if (await checkbox.isVisible({ timeout: 500 })) {
+            const isChecked = await checkbox.isChecked();
+            if (!isChecked) {
+              console.log('Checking confirmation checkbox');
+              await checkbox.check();
+            }
+          }
+        }
+
+        // Handle toggle switches (modern UI)
+        const toggles = await page.locator('input[type="checkbox"][role="switch"], .toggle, .switch, [role="switch"]').all();
+        for (const toggle of toggles) {
+          if (await toggle.isVisible({ timeout: 500 })) {
+            try {
+              const isChecked = await toggle.isChecked().catch(() => false);
+              const ariaChecked = await toggle.getAttribute('aria-checked').catch(() => null);
+              const isOn = isChecked || ariaChecked === 'true';
+              
+              if (isOn) {
+                console.log('Turning off toggle switch');
+                await toggle.click();
+              }
+            } catch (e) {
+              // Some toggles might not be standard checkboxes
+            }
+          }
+        }
+      } catch (formError) {
+        console.log('Form filling error (non-critical):', formError.message);
+      }
+
+      // Step 2: Find and click unsubscribe button/link
       const unsubscribeSelectors = [
-        // Buttons with text
+        // Primary unsubscribe buttons/links (most specific first)
+        'button:has-text("Unsubscribe all")',
+        'button:has-text("Unsubscribe from all")',
+        'a:has-text("Unsubscribe from all")',
         'button:has-text("unsubscribe")',
         'button:has-text("Unsubscribe")',
         'button:has-text("UNSUBSCRIBE")',
-        'button:has-text("opt out")',
-        'button:has-text("Opt Out")',
-        'button:has-text("remove me")',
-        'button:has-text("Remove Me")',
-        
-        // Links with text
         'a:has-text("unsubscribe")',
         'a:has-text("Unsubscribe")',
         'a:has-text("Click here to unsubscribe")',
+        
+        // Opt-out variations
+        'button:has-text("opt out")',
+        'button:has-text("Opt Out")',
         'a:has-text("opt out")',
+        'a:has-text("Opt-Out")',
+        'button:has-text("remove me")',
         'a:has-text("remove from list")',
         
-        // Common class/id patterns (case insensitive)
+        // Class/ID patterns
         'button[class*="unsubscribe" i]',
         'a[class*="unsubscribe" i]',
         'button[id*="unsubscribe" i]',
         'a[id*="unsubscribe" i]',
         
-        // Form inputs
+        // Form submit buttons
         'input[type="submit"][value*="unsubscribe" i]',
+        'button[type="submit"]:has-text("Unsubscribe")',
         'input[type="button"][value*="unsubscribe" i]',
         
-        // Generic confirmation buttons
-        'button:has-text("confirm")',
-        'button:has-text("Confirm")',
-        'button:has-text("yes")',
-        'button:has-text("Yes")',
+        // Generic submit (last resort)
         'button:has-text("submit")',
         'input[type="submit"]',
       ];
@@ -161,7 +376,53 @@ async function processUnsubscribeJob(job) {
               
               // Wait after click, but handle if page closes
               try {
-                await page.waitForTimeout(2000);
+                await page.waitForTimeout(1000);
+                
+                // Check for modal/dialog confirmation
+                const modalSelectors = [
+                  'div[role="dialog"]',
+                  'div[role="alertdialog"]',
+                  '.modal',
+                  '.dialog',
+                  '[class*="modal" i]:visible',
+                ];
+                
+                for (const modalSelector of modalSelectors) {
+                  try {
+                    const modal = await page.locator(modalSelector).first();
+                    if (await modal.isVisible({ timeout: 500 })) {
+                      console.log('Modal detected, looking for confirmation button');
+                      
+                      // Look for confirmation in modal
+                      const modalConfirmSelectors = [
+                        'button:has-text("yes")',
+                        'button:has-text("confirm")',
+                        'button:has-text("unsubscribe")',
+                        'button:has-text("continue")',
+                        'button:has-text("ok")',
+                      ];
+                      
+                      for (const confirmSelector of modalConfirmSelectors) {
+                        try {
+                          const confirmBtn = await modal.locator(confirmSelector).first();
+                          if (await confirmBtn.isVisible({ timeout: 500 })) {
+                            console.log(`Clicking modal confirmation: ${confirmSelector}`);
+                            await confirmBtn.click();
+                            await page.waitForTimeout(1000);
+                            break;
+                          }
+                        } catch (e) {
+                          // Try next selector
+                        }
+                      }
+                      break;
+                    }
+                  } catch (e) {
+                    // No modal
+                  }
+                }
+                
+                await page.waitForTimeout(1000);
               } catch (waitError) {
                 console.log(`Page closed after click, likely successful redirect`);
                 status = 'success';
@@ -169,8 +430,48 @@ async function processUnsubscribeJob(job) {
                 return; // Exit early
               }
               
+              // Step 3: Handle post-click interactions (confirmations, additional forms)
+              
+              // Check if there's another form that appeared
+              try {
+                const postClickForms = await page.locator('form').all();
+                for (const form of postClickForms) {
+                  if (await form.isVisible({ timeout: 500 })) {
+                    // Fill any new email fields
+                    const newEmailInputs = await form.locator('input[type="email"]').all();
+                    for (const input of newEmailInputs) {
+                      const inputValue = await input.inputValue();
+                      if (!inputValue || inputValue.trim() === '') {
+                        await input.fill(email.from || 'user@example.com');
+                      }
+                    }
+                    
+                    // Check any new checkboxes
+                    const newCheckboxes = await form.locator('input[type="checkbox"]').all();
+                    for (const checkbox of newCheckboxes) {
+                      const isChecked = await checkbox.isChecked();
+                      if (!isChecked) {
+                        await checkbox.check();
+                      }
+                    }
+                  }
+                }
+              } catch (e) {
+                // No additional forms
+              }
+              
               // Check for confirmation button
-              const confirmSelectors = ['button:has-text("confirm")', 'button:has-text("yes")', 'input[type="submit"]'];
+              const confirmSelectors = [
+                'button:has-text("confirm")',
+                'button:has-text("Confirm")',
+                'button:has-text("yes")',
+                'button:has-text("Yes")',
+                'button:has-text("continue")',
+                'button:has-text("proceed")',
+                'button[type="submit"]',
+                'input[type="submit"]',
+              ];
+              
               for (const confirmSelector of confirmSelectors) {
                 try {
                   const confirmBtn = await page.locator(confirmSelector).first();
