@@ -1,4 +1,4 @@
-import { complete } from './client.js';
+import { complete, structuredComplete, safeParseJSON } from './client.js';
 
 /**
  * Classify email into one of the user's categories
@@ -39,67 +39,34 @@ Classify this email into the most appropriate category. Return JSON only.`,
   ];
 
   try {
-    const response = await complete(messages, { temperature: 0.2, maxTokens: 100 });
-    
-    // Remove markdown code blocks if present
-    let cleanResponse = response.trim();
-    if (cleanResponse.startsWith('```json')) {
-      cleanResponse = cleanResponse.replace(/^```json\s*/, '').replace(/\s*```$/, '');
-    } else if (cleanResponse.startsWith('```')) {
-      cleanResponse = cleanResponse.replace(/^```\s*/, '').replace(/\s*```$/, '');
+    const schema = {
+      type: 'object',
+      additionalProperties: false,
+      required: ['categoryName','confidence'],
+      properties: {
+        categoryName: { type: 'string', minLength: 1 },
+        confidence: { type: 'number', minimum: 0, maximum: 1 }
+      }
+    };
+
+    let raw = await structuredComplete(messages, { temperature: 0.2, maxTokens: 150, schema });
+    let parsed = safeParseJSON(raw);
+    if (!parsed) {
+      // legacy fallback
+      raw = await complete(messages, { temperature: 0.2, maxTokens: 120, response_format: { type: 'json_object' } });
+      parsed = safeParseJSON(raw);
     }
-    
-    // Parse JSON response
-    const parsed = JSON.parse(cleanResponse.trim());
-    
-    // Validate response structure
-    if (parsed.categoryName && typeof parsed.confidence === 'number') {
-      // Verify category exists
+    if (parsed && typeof parsed.categoryName === 'string' && typeof parsed.confidence === 'number') {
       const categoryExists = categories.some(cat => cat.name === parsed.categoryName);
       if (categoryExists) {
         return parsed;
       }
     }
-    
-    // Fallback to first category
-    return { categoryName: categories[0].name, confidence: 0.5 };
   } catch (error) {
     console.error('Classification error:', error.message);
-    // Fallback to first category
-    return { categoryName: categories[0].name, confidence: 0.3 };
   }
-}
-
-/**
- * Summarize email content to 1-3 sentences
- * @param {object} email - { subject, from, text }
- * @returns {Promise<string>}
- */
-export async function summarizeEmail(email) {
-  const emailContent = `
-Subject: ${email.subject || 'No subject'}
-From: ${email.from || 'Unknown'}
-Content: ${(email.text || email.html || email.snippet || '').substring(0, 2000)}
-  `.trim();
-
-  const messages = [
-    {
-      role: 'system',
-      content: 'You are an email summarization assistant. Summarize emails in 1-3 clear, concise sentences. Focus on the main purpose and any action items.',
-    },
-    {
-      role: 'user',
-      content: `Summarize this email:\n\n${emailContent}`,
-    },
-  ];
-
-  try {
-    const response = await complete(messages, { temperature: 0.3, maxTokens: 150 });
-    return response.trim() || email.snippet?.substring(0, 100) || 'No summary available';
-  } catch (error) {
-    console.error('Summarization error:', error.message);
-    return email.snippet?.substring(0, 100) || 'No summary available';
-  }
+  // Fallback to first category
+  return { categoryName: categories[0].name, confidence: 0.4 };
 }
 
 /**
@@ -158,39 +125,46 @@ Respond ONLY with valid JSON in this exact format:
   ];
 
   try {
-    const response = await complete(messages, { temperature: 0.2, maxTokens: 300 });
-    
-    // Remove markdown code blocks if present
-    let cleanResponse = response.trim();
-    if (cleanResponse.startsWith('```json')) {
-      cleanResponse = cleanResponse.replace(/^```json\s*/, '').replace(/\s*```$/, '');
-    } else if (cleanResponse.startsWith('```')) {
-      cleanResponse = cleanResponse.replace(/^```\s*/, '').replace(/\s*```$/, '');
+    const schema = {
+      type: 'object',
+      additionalProperties: false,
+      required: ['summary','unsubscribeUrl','unsubscribeMailto'],
+      properties: {
+        summary: { type: 'string', minLength: 5 },
+        unsubscribeUrl: { type: ['string','null'] },
+        unsubscribeMailto: { type: ['string','null'] }
+      }
+    };
+
+    const raw = await structuredComplete(messages, {
+      temperature: 0.2,
+      maxTokens: 400,
+      schema,
+      model: 'gpt-4o-mini'
+    });
+
+    console.log('AI analyzeEmail raw response:', raw);
+    let parsed = safeParseJSON(raw);
+    if (!parsed) {
+      // Attempt second try with legacy complete as deep fallback
+      const legacyRaw = await complete(messages, { temperature: 0.2, maxTokens: 300, response_format: { type: 'json_object' } });
+      parsed = safeParseJSON(legacyRaw);
     }
-    
-    const parsed = JSON.parse(cleanResponse.trim());
-    
-    // Validate response structure
-    if (parsed.summary && typeof parsed.summary === 'string') {
+
+    if (parsed && typeof parsed.summary === 'string') {
       return {
         summary: parsed.summary,
         unsubscribeUrl: parsed.unsubscribeUrl || null,
         unsubscribeMailto: parsed.unsubscribeMailto || null,
       };
     }
-    
-    // Fallback
-    return {
-      summary: email.snippet?.substring(0, 100) || 'No summary available',
-      unsubscribeUrl: null,
-      unsubscribeMailto: null,
-    };
   } catch (error) {
     console.error('Email analysis error:', error.message);
-    return {
-      summary: email.snippet?.substring(0, 100) || 'No summary available',
-      unsubscribeUrl: null,
-      unsubscribeMailto: null,
-    };
   }
+
+  return {
+    summary: email.snippet?.substring(0, 100) || 'No summary available',
+    unsubscribeUrl: null,
+    unsubscribeMailto: null,
+  };
 }
