@@ -351,6 +351,16 @@ async function processUnsubscribeJob(job) {
         'input[type="submit"][value*="unsubscribe" i]',
         'button[type="submit"]:has-text("Unsubscribe")',
         'input[type="button"][value*="unsubscribe" i]',
+        // Generic submit / continue buttons that might finalize preferences
+        'input[type="button"][value="Submit" i]',
+        'input[type="button"][value="submit" i]',
+        'input[type="button"][value="Save" i]',
+        'input[type="button"][value="Update" i]',
+        'button:has-text("Save Preferences")',
+        'button:has-text("Save changes")',
+        'button:has-text("Save")',
+        'button:has-text("Update")',
+        'button:has-text("Apply")',
         
         // Generic submit (last resort)
         'button:has-text("submit")',
@@ -532,6 +542,59 @@ async function processUnsubscribeJob(job) {
           
           if (!clicked) {
             notes = 'No unsubscribe button found';
+            // As a last resort attempt: manually submit visible forms if they look like preference/unsubscribe forms
+            try {
+              const formCount = await page.locator('form').count();
+              for (let i = 0; i < formCount; i++) {
+                const form = page.locator('form').nth(i);
+                if (await form.isVisible({ timeout: 500 })) {
+                  const formHtml = await form.innerHTML();
+                  const formLower = formHtml.toLowerCase();
+                  const hintPatterns = ['unsubscribe', 'email preferences', 'opt-out', 'opt out', 'newsletter', 'subscription'];
+                  const hasHint = hintPatterns.some(p => formLower.includes(p));
+                  if (hasHint) {
+                    console.log(`Attempting manual form submission (fallback) for form #${i}`);
+                    // Try to find a JS handler (onclick) button first
+                    const jsButtons = await form.locator('input[type="button"], button[type="button"]').all();
+                    let jsClicked = false;
+                    for (const btn of jsButtons) {
+                      try {
+                        if (await btn.isVisible({ timeout: 200 })) {
+                          const val = (await btn.getAttribute('value')) || (await btn.textContent()) || '';
+                          if (/submit|save|update|apply|confirm|unsubscribe/i.test(val)) {
+                            console.log(`Clicking JS button inside form: ${val}`);
+                            await btn.click();
+                            jsClicked = true;
+                            break;
+                          }
+                        }
+                      } catch {}
+                    }
+                    if (!jsClicked) {
+                      try {
+                        await form.evaluate(f => f.submit());
+                        console.log('Executed form.submit() via evaluate');
+                      } catch (e) {
+                        console.log('Manual form.submit() failed:', e.message);
+                      }
+                    }
+                    try {
+                      await page.waitForTimeout(2000);
+                      const bodyText = (await page.textContent('body')).toLowerCase();
+                      const successHints = ['unsubscribed', 'successfully', 'removed from', 'no longer receive'];
+                      if (successHints.some(h => bodyText.includes(h))) {
+                        status = 'success';
+                        notes = 'Fallback manual form submission appears successful';
+                        clicked = true;
+                        break;
+                      }
+                    } catch {}
+                  }
+                }
+              }
+            } catch (fallbackErr) {
+              console.log('Fallback form submission attempt failed or not applicable:', fallbackErr.message);
+            }
           }
         } catch (e) {
           notes = 'Could not check for success messages';
