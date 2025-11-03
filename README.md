@@ -59,7 +59,71 @@ email-sorter/
 
 ## Setup Instructions
 
-### 1. Clone and Install Dependencies
+### Option A: Docker Setup (Recommended for Quick Start)
+
+The easiest way to get started is using Docker Compose, which sets up everything you need in containers.
+
+#### 1. Clone the Repository
+
+```bash
+git clone <repository-url>
+cd email-sorter
+```
+
+#### 2. Configure Environment
+
+```bash
+cp .env.docker .env
+```
+
+Edit `.env` and fill in your credentials:
+
+```env
+# Generate a random session secret
+SESSION_SECRET=your-super-secret-session-key-change-in-production
+
+# Generate encryption key (32 bytes hex)
+# Run: node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+ENCRYPTION_KEY=your-64-character-hex-string
+
+# Google OAuth credentials
+GOOGLE_CLIENT_ID=your-google-client-id
+GOOGLE_CLIENT_SECRET=your-google-client-secret
+GOOGLE_OAUTH_REDIRECT_URI=http://localhost:4000/auth/google/callback
+GOOGLE_TEST_ALLOWED_EMAILS=your-test-email@gmail.com
+
+# OpenAI API Key
+OPENAI_API_KEY=sk-your-openai-api-key
+```
+
+See [Google OAuth Setup](#4-setup-google-oauth) below for obtaining Google credentials.
+
+#### 3. Start All Services
+
+```bash
+docker-compose up --build -d
+```
+
+This starts:
+- **PostgreSQL** - Database on port 5432
+- **Redis** - Job queue on port 6379
+- **API Server** - Backend on http://localhost:4000
+- **Worker** - Background job processor
+- **Web App** - Frontend on http://localhost:5173
+
+#### 4. Access the Application
+
+Open http://localhost:5173 in your browser and sign in with Google!
+
+**📖 For detailed Docker instructions, troubleshooting, and commands, see [DOCKER.md](DOCKER.md)**
+
+---
+
+### Option B: Local Development Setup
+
+For local development without Docker:
+
+#### 1. Clone and Install Dependencies
 
 ```bash
 git clone <repository-url>
@@ -67,15 +131,15 @@ cd email-sorter
 pnpm install
 ```
 
-### 2. Start Docker Services
+#### 2. Start Docker Services (PostgreSQL & Redis only)
 
 ```bash
-docker-compose up -d
+docker-compose up -d postgres redis
 ```
 
-This starts PostgreSQL and Redis containers.
+This starts PostgreSQL and Redis containers only.
 
-### 3. Configure Environment Variables
+#### 3. Configure Environment Variables
 
 Copy the example environment file:
 
@@ -124,7 +188,7 @@ cp .env ./packages/db/.env
 node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 ```
 
-### 4. Setup Google OAuth
+#### 4. Setup Google OAuth
 
 1. Go to [Google Cloud Console](https://console.cloud.google.com/)
 2. Create a new project or select an existing one
@@ -135,7 +199,7 @@ node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 7. Copy the **Client ID** and **Client Secret** to your `.env` file
 8. Add your test email to `GOOGLE_TEST_ALLOWED_EMAILS`
 
-### 5. Setup Database
+#### 5. Setup Database
 
 ```bash
 # Run Prisma migrations
@@ -145,7 +209,7 @@ pnpm db:migrate
 pnpm db:seed
 ```
 
-### 6. Start the Application
+#### 6. Start the Application
 
 ```bash
 # Start all services (API + Web + Worker)

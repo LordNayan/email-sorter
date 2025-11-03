@@ -1,0 +1,50 @@
+# Build stage
+FROM node:20-alpine AS builder
+
+# Install pnpm (use version 9.x for lockfile v6.1 compatibility) and OpenSSL for Prisma
+RUN corepack enable && corepack prepare pnpm@latest --activate  && \
+    apk add --no-cache openssl
+
+WORKDIR /app
+
+# Copy workspace files
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+
+# Copy all packages and apps
+COPY packages ./packages
+COPY apps/worker ./apps/worker
+
+# Install dependencies
+RUN pnpm install --frozen-lockfile
+
+# Generate Prisma Client
+RUN cd packages/db && pnpm run generate
+
+# Production stage
+FROM node:20-alpine
+
+# Install OpenSSL, and Chromium for Playwright (needed for unsubscribe automation)
+RUN corepack enable && corepack prepare pnpm@latest --activate && \
+    apk add --no-cache chromium openssl
+
+# Set Playwright to use system chromium
+ENV PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
+ENV PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/usr/bin/chromium-browser
+
+WORKDIR /app
+
+# Copy package files
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+
+# Copy packages and worker app
+COPY --from=builder /app/packages ./packages
+COPY --from=builder /app/apps/worker ./apps/worker
+
+# Install production dependencies only
+RUN pnpm install --frozen-lockfile --prod
+
+# Generate Prisma Client in production
+RUN cd packages/db && pnpm run generate
+
+# Start the worker
+CMD cd /app/apps/worker && pnpm start
