@@ -2,11 +2,11 @@ import dotenv from 'dotenv';
 import { fileURLToPath } from 'url';
 import { dirname, resolve } from 'path';
 
-// Load .env from project root
+// Load .env from project root (only in development)
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 const envPath = resolve(__dirname, '../../.env');
-dotenv.config({ path: envPath, override: true });
+dotenv.config({ path: envPath, override: false });
 
 import express from 'express';
 import session from 'express-session';
