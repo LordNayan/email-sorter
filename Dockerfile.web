@@ -1,0 +1,37 @@
+# Build stage
+FROM node:20-alpine AS builder
+
+# Install pnpm (use version 9.x for lockfile v6.1 compatibility)
+RUN corepack enable && corepack prepare pnpm@latest --activate
+
+WORKDIR /app
+
+# Copy workspace files
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+
+# Copy web app
+COPY apps/web ./apps/web
+
+# Install dependencies
+RUN pnpm install --frozen-lockfile
+
+# Build the web app
+WORKDIR /app/apps/web
+RUN pnpm run build
+
+# Production stage - serve with a lightweight server
+FROM node:20-alpine
+
+# Install a static file server (no pnpm needed in production stage for web)
+RUN npm install -g serve
+
+WORKDIR /app
+
+# Copy built files from builder
+COPY --from=builder /app/apps/web/dist ./dist
+
+# Expose web port
+EXPOSE 5173
+
+# Serve the built files
+CMD ["serve", "-s", "dist", "-l", "5173"]
