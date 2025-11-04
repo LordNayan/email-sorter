@@ -15,6 +15,7 @@ A minimal, working application that automatically sorts, classifies, and summari
 ## Tech Stack
 
 ### Backend
+
 - **Node.js + Express** - REST API server
 - **PostgreSQL + Prisma** - Database and ORM
 - **BullMQ + Redis** - Job queue for email processing
@@ -22,11 +23,13 @@ A minimal, working application that automatically sorts, classifies, and summari
 - **OpenAI API** - Email classification and summarization
 
 ### Frontend
+
 - **React + Vite** - Modern frontend framework
 - **React Router** - Client-side routing
 - **DOMPurify** - Safe HTML rendering
 
 ### Infrastructure
+
 - **pnpm Workspaces** - Monorepo management
 - **Docker Compose** - Local development environment
 - **Playwright** - End-to-end testing
@@ -59,67 +62,7 @@ email-sorter/
 
 ## Setup Instructions
 
-### Option A: Docker Setup (Recommended for Quick Start)
-
-The easiest way to get started is using Docker Compose, which sets up everything you need in containers.
-
-#### 1. Clone the Repository
-
-```bash
-git clone <repository-url>
-cd email-sorter
-```
-
-#### 2. Configure Environment
-
-```bash
-cp .env.docker .env
-```
-
-Edit `.env` and fill in your credentials:
-
-```env
-# Generate a random session secret
-SESSION_SECRET=your-super-secret-session-key-change-in-production
-
-# Generate encryption key (32 bytes hex)
-# Run: node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
-ENCRYPTION_KEY=your-64-character-hex-string
-
-# Google OAuth credentials
-GOOGLE_CLIENT_ID=your-google-client-id
-GOOGLE_CLIENT_SECRET=your-google-client-secret
-GOOGLE_OAUTH_REDIRECT_URI=http://localhost:4000/auth/google/callback
-GOOGLE_TEST_ALLOWED_EMAILS=your-test-email@gmail.com
-
-# OpenAI API Key
-OPENAI_API_KEY=sk-your-openai-api-key
-```
-
-See [Google OAuth Setup](#4-setup-google-oauth) below for obtaining Google credentials.
-
-#### 3. Start All Services
-
-```bash
-docker-compose up --build -d
-```
-
-This starts:
-- **PostgreSQL** - Database on port 5432
-- **Redis** - Job queue on port 6379
-- **API Server** - Backend on http://localhost:4000
-- **Worker** - Background job processor
-- **Web App** - Frontend on http://localhost:5173
-
-#### 4. Access the Application
-
-Open http://localhost:5173 in your browser and sign in with Google!
-
-**📖 For detailed Docker instructions, troubleshooting, and commands, see [DOCKER.md](DOCKER.md)**
-
----
-
-### Option B: Local Development Setup
+### Local Development Setup
 
 For local development without Docker:
 
@@ -176,6 +119,7 @@ OPENAI_API_KEY=sk-...
 SESSION_SECRET=generate-a-random-secret-here
 ENCRYPTION_KEY=generate-32-byte-hex-key-here
 ```
+
 Copy the env to db folder as well:
 
 ```bash
@@ -217,6 +161,7 @@ pnpm dev
 ```
 
 This starts:
+
 - **API Server**: http://localhost:4000
 - **Web App**: http://localhost:5173
 - **Worker**: Background email processor
@@ -262,6 +207,7 @@ At build time you can also reference `__API_URL__` if needed inside the client c
 ### 3. Email Processing
 
 The worker automatically:
+
 - Fetches new emails every 2 minutes
 - Classifies them into your categories using AI
 - Generates summaries
@@ -283,34 +229,6 @@ The worker automatically:
 - HTML emails are sanitized and rendered safely
 - See AI-generated summary at the top
 
-## Development
-
-### Run Individual Services
-
-```bash
-# API only
-pnpm --filter api dev
-
-# Web only
-pnpm --filter web dev
-
-# Worker only
-pnpm --filter worker dev
-```
-
-### Database Management
-
-```bash
-# Create a new migration
-pnpm --filter db migrate
-
-# Open Prisma Studio (database GUI)
-pnpm --filter db studio
-
-# Reset database (WARNING: deletes all data)
-pnpm --filter db migrate:reset
-```
-
 ### Testing
 
 ```bash
@@ -327,24 +245,28 @@ pnpm test
 ## API Endpoints
 
 ### Authentication
+
 - `GET /auth/google` - Start OAuth flow
 - `GET /auth/google/callback` - OAuth callback
 - `POST /auth/logout` - Logout
 - `GET /me` - Get current user
 
 ### Categories
+
 - `GET /categories` - List categories
 - `POST /categories` - Create category
 - `PATCH /categories/:id` - Update category
 - `DELETE /categories/:id` - Delete category
 
 ### Emails
+
 - `GET /emails?categoryId=...` - List emails (with pagination)
 - `GET /emails/:id` - Get single email
 - `POST /emails/bulk/delete` - Bulk delete
 - `POST /emails/bulk/unsubscribe` - Bulk unsubscribe
 
 ### Accounts
+
 - `GET /accounts` - List connected Gmail accounts
 - `POST /accounts/:id/resync` - Trigger manual sync
 
@@ -403,6 +325,7 @@ docker-compose restart redis
 ### Gmail API Quota
 
 Gmail API has rate limits. If you hit them:
+
 - Reduce sync frequency in `apps/worker/index.js`
 - Use History API (already implemented) for incremental syncs
 
@@ -417,44 +340,6 @@ redis-cli ping
 
 # Check BullMQ queues
 # Install Bull Board for UI monitoring
-```
-
-## Production Deployment
-
-### Environment Variables
-
-Update these for production:
-
-```env
-NODE_ENV=production
-WEB_URL=https://your-domain.com
-API_URL=https://api.your-domain.com
-SESSION_SECRET=strong-random-secret
-ENCRYPTION_KEY=strong-random-32-byte-hex
-```
-
-### Database
-
-Use a production PostgreSQL instance (not Docker):
-
-```env
-DATABASE_URL=postgresql://user:pass@host:5432/db?schema=public
-```
-
-### Redis
-
-Use a production Redis instance (AWS ElastiCache, Redis Cloud, etc.):
-
-```env
-REDIS_URL=redis://prod-redis-host:6379
-```
-
-### OAuth Callback
-
-Update Google Cloud Console with production redirect URI:
-
-```
-https://api.your-domain.com/auth/google/callback
 ```
 
 ## License

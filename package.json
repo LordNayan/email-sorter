@@ -8,6 +8,7 @@
     "dev:web+api": "concurrently \"pnpm --filter api dev\" \"pnpm --filter web dev\"",
     "db:migrate": "pnpm --filter db migrate",
     "db:seed": "pnpm --filter db seed",
+    "docker:up": "docker-compose up -d postgres redis",
     "test": "pnpm --filter api test && pnpm --filter worker test && pnpm --filter gmail test && pnpm test:e2e",
     "test:e2e": "playwright test",
     "lint": "eslint ."
